@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      #map {
+        height: 400px;  
+        width: 100%;  
+       }
+    </style>
+  </head>
+  <body>
+    <h3>Maps Demo</h3>
+    <p>Enter the Source</p>
+    Source: <input type="text" id="s_id" size="70">
+    <p>Enter the Destination</p>
+    Destination: <input type="text" id="d_id" size="70">
+    <button id="search">Search</button>
+    <div id="map"></div>
+    <script>
+      
+
+// Initialize and add the map
+function initMap() {
+
+  var directionsService = new google.maps.DirectionsService;
+  var directionsDisplay = new google.maps.DirectionsRenderer;
+  var markerArray = [];
+  var stepDisplay = new google.maps.InfoWindow;
+  var usa = {lat: 44.9323, lng: -93.2624};
+  var map = new google.maps.Map(
+      document.getElementById('map'), {zoom: 4, center: usa});
+  directionsDisplay.setMap(map);
+
+  var defaultBounds = new google.maps.LatLngBounds(
+  new google.maps.LatLng(-90, -180),
+  new google.maps.LatLng(90, 180));
+
+  //Gets the source and destination from the User interface
+  var s_input = document.getElementById('s_id');
+  var d_input = document.getElementById('d_id');
+  var s_button=document.getElementById('search');
+      var options = {
+        bounds: defaultBounds,
+        types: ['address']
+      };
+  //Initalizing autocompletes for source and destination fields
+  var autocomplete1 = new google.maps.places.Autocomplete(s_input, options);
+  var autocomplete2 = new google.maps.places.Autocomplete(d_input, options);
+  autocomplete1.addListener('place_changed', function(){
+  var places = autocomplete1.getPlace();
+  alert("soucre" + places.geometry.location);
+
+});
+    autocomplete2.addListener('place_changed', function(){
+  var places = autocomplete2.getPlace();
+  alert("Destination" + places.geometry.location);
+});
+
+
+    //Search Button Listener that handles requests and responses with the server
+    s_button.addEventListener("click", function(){ 
+
+      console.log("pressed");
+
+      for (var i = 0; i < markerArray.length; i++) {
+          markerArray[i].setMap(null);
+        }
+
+      var map = new google.maps.Map(
+      document.getElementById('map'), {zoom: 4, center: usa});
+      //Display the map
+      directionsDisplay.setMap(map);
+
+      var today= new Date();
+      var time = today.getHours() + ":" + today.getMinutes() + ":" + today.getSeconds() + ":" + today.getMilliseconds();
+      console.log("db start access"+ time);
+      //Checks the databse for entries.
+      var check_response=check_db(s_input.value,d_input.value);
+      console.log(check_response);
+
+
+      if(check_response!=null)
+      {
+          console.log("check");
+          response = check_response.d_response;
+          var request = { 
+                origin: s_input.value,
+                destination: d_input.value,
+                travelMode: 'DRIVING'
+              }
+              var renderer = new google.maps.DirectionsRenderer();
+              renderDirections(map, response, request);
+              // Renders direction on the Map
+              function renderDirections(map, response, request){
+
+                  renderer.setOptions({
+                      directions : {
+                          routes : typecastRoutes(response.routes),
+                          request : request
+                      },
+                      draggable : true,
+                      map : map
+                  });
+              }
+              showSteps(response, markerArray, stepDisplay, map);
+
+      }
+      else
+      {
+        //Sends request to server to access Google directions API
+        console.log("not check");
+        var xhttp = new XMLHttpRequest();
+        xhttp.open("POST", "http://localhost:8000", true);
+        xhttp.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+        xhttp.send(JSON.stringify({
+            source: s_input.value,
+            destination: d_input.value
+        }));
+          var today= new Date();
+          var time = today.getHours() + ":" + today.getMinutes() + ":" + today.getSeconds() + ":" + today.getMilliseconds();
+          console.log("directions API start access"+ time);
+        //Receive the response from the server for the Directions
+        xhttp.onreadystatechange = function() {
+            if (this.readyState == 4 && this.status == 200) {
+              var today= new Date();
+              var time = today.getHours() + ":" + today.getMinutes() + ":" + today.getSeconds() + ":" + today.getMilliseconds();
+              console.log("directions API end access"+ time);
+              var response = JSON.parse(this.responseText)
+
+              var request = { 
+                origin: s_input.value,
+                destination: d_input.value,
+                travelMode: 'DRIVING'
+              }
+              //Renders the polyline from the directions response 
+              var renderer = new google.maps.DirectionsRenderer();
+              renderDirections(map, response, request);
+
+              function renderDirections(map, response, request){
+                  renderer.setOptions({
+                      directions : {
+                          routes : typecastRoutes(response.routes),
+                          request : request
+                      },
+                      draggable : true,
+                      map : map
+                  });
+              }
+              //Inserts entries into the database by sending request to server
+              var xhttp1= new XMLHttpRequest();
+              xhttp1.open("POST", "http://localhost:8000/insert", true);
+              xhttp1.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+              xhttp1.send(JSON.stringify({
+                  source: s_input.value,
+                  destination: d_input.value,
+                  d_response : response
+              }));
+              //Receives response if the document was inserted in the database
+              xhttp1.onreadystatechange = function() {
+                if (this.readyState == 4 && this.status == 200) {
+                  console.log(this.responseText);
+                }
+              }
+
+
+              showSteps(response, markerArray, stepDisplay, map);
+
+            }
+        };
+      }
+
+    });
+    // Checks the database for entry
+    function check_db(source, destination){
+
+      var xhttp = new XMLHttpRequest();
+      xhttp.open("POST", "http://localhost:8000/check", true);
+      xhttp.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+      xhttp.send(JSON.stringify({
+          source: source,
+          destination: destination
+      }));
+      xhttp.onreadystatechange = function() {
+          if (this.readyState == 4 && this.status == 200) {
+              var response = JSON.parse(this.responseText);
+              if(response[0]!=null)
+              {
+                var today= new Date();
+                var time = today.getHours() + ":" + today.getMinutes() + ":" + today.getSeconds() + ":" + today.getMilliseconds();
+                console.log("db end access"+ time);
+                var dbresponse = {response: response[0].d_response};
+                console.log(dbresponse);
+                return dbresponse;
+              }
+              else
+              {
+                return null;
+              }
+            }
+          }
+
+
+    }
+    //Decodes the server response to match the client directions response
+    function typecastRoutes(routes){
+    routes.forEach(function(route){
+        route.bounds = asBounds(route.bounds);
+        
+        route.overview_path = asPath(route.overview_polyline);
+
+        route.legs.forEach(function(leg){
+            leg.start_location = asLatLng(leg.start_location);
+            leg.end_location   = asLatLng(leg.end_location);
+
+            leg.steps.forEach(function(step){
+                step.start_location = asLatLng(step.start_location);
+                step.end_location   = asLatLng(step.end_location);
+                step.path = asPath(step.polyline);
+            });
+
+        });
+    });
+    return routes;
+}
+
+function asBounds(boundsObject){
+    return new google.maps.LatLngBounds(asLatLng(boundsObject.southwest),
+                                    asLatLng(boundsObject.northeast));
+}
+
+function asLatLng(latLngObject){
+    return new google.maps.LatLng(latLngObject.lat, latLngObject.lng);
+}
+
+function asPath(encodedPolyObject){
+    return google.maps.geometry.encoding.decodePath( encodedPolyObject.points );
+} 
+    //Shows markers on the map
+    function showSteps(directionResult, markerArray, stepDisplay, map) {
+        var myRoute = directionResult.routes[0].legs[0];
+        for (var i = 0; i < myRoute.steps.length; i++) {
+          var marker = markerArray[i] = markerArray[i] || new google.maps.Marker;
+          marker.setMap(map);
+          marker.setPosition(myRoute.steps[i].start_location);
+          attachInstructionText(
+              stepDisplay, marker, myRoute.steps[i].start_location, map);
+        }
+        var s_input = document.getElementById('s_id');
+        var d_input = document.getElementById('d_id');
+        var geocoder = new google.maps.Geocoder();
+        geocoder.geocode( { 'address': String(s_input.value)}, function(results, status) {
+            if (status == 'OK') {
+              map.setCenter(results[0].geometry.location);
+              var marker = new google.maps.Marker({
+                  map: map,
+                  position: results[0].geometry.location
+
+              });
+              attachInstructionText(
+              stepDisplay, marker, results[0].geometry.location, map);
+            } else {
+              alert('Geocode was not successful for the following reason: ' + status);
+            }
+          });
+         geocoder.geocode( { 'address': String(d_input.value)}, function(results, status) {
+            if (status == 'OK') {
+              map.setCenter(results[0].geometry.location);
+              var marker = new google.maps.Marker({
+                  map: map,
+                  position: results[0].geometry.location
+
+              });
+              attachInstructionText(
+              stepDisplay, marker, results[0].geometry.location, map);
+            } else {
+              alert('Geocode was not successful for the following reason: ' + status);
+            }
+          });
+        }
+    //Displays weather details if marker is clicked
+    function attachInstructionText(stepDisplay, marker, location, map) {
+        google.maps.event.addListener(marker, 'click', function() {
+          var xhttp = new XMLHttpRequest();
+          xhttp.open("POST", "http://localhost:8000/weather", true);
+          xhttp.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+          xhttp.send(JSON.stringify(location));
+          var today= new Date();
+          var time = today.getHours() + ":" + today.getMinutes() + ":" + today.getSeconds() + ":" + today.getMilliseconds();
+          console.log("Weather API start access"+ time);
+          xhttp.onreadystatechange = function() {
+              if (this.readyState == 4 && this.status == 200) {
+                  var today= new Date();
+                  var time = today.getHours() + ":" + today.getMinutes() + ":" + today.getSeconds() + ":" + today.getMilliseconds();
+                  console.log("Weather API end access"+ time);
+                  stepDisplay.setContent(this.responseText);
+                  stepDisplay.open(map, marker);
+          }
+        }
+
+          
+      });
+    }
+}
+    </script>
+    <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBE7bs-amwZHzzrBwK7s4HJkwU8D7J7R7A&libraries=geometry,places&callback=initMap">
+    </script>
+  </body>
+</html>

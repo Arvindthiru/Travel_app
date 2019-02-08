@@ -1,0 +1,22 @@
+{
+  "name": "maps",
+  "version": "1.0.0",
+  "description": "Project distributed systems",
+  "main": "appdirections1_final.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "maps",
+    "node"
+  ],
+  "author": "Arvind Thirumurugan",
+  "license": "ISC",
+  "dependencies": {
+    "@google/maps": "^0.5.5",
+    "body-parser": "^1.18.3",
+    "express": "^4.16.3",
+    "mongodb": "^3.1.6",
+    "openweather-apis": "^3.3.5"
+  }
+}
